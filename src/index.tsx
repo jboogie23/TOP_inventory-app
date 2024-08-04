@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { jsxRenderer, useRequestContext } from 'hono/jsx-renderer';
 import { jsx } from 'hono/jsx';
 import { Fragment } from 'hono/jsx';
+import type { D1Database } from '@cloudflare/workers-types';
 
 // Define the app and types
 type Bindings = {
