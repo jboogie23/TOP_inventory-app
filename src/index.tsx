@@ -1,7 +1,10 @@
+/** @jsxImportSource hono/jsx */
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { jsxRenderer, useRequestContext } from 'hono/jsx-renderer';
+import { jsx } from 'hono/jsx';
+import { Fragment } from 'hono/jsx';
 
 // Define the app and types
 type Bindings = {
@@ -23,27 +26,25 @@ type Item = {
 };
 
 // JSX renderer setup
-app.get(
+app.use(
 	'*',
-	jsxRenderer(({ children }) => {
-		return (
-			<html>
-				<head>
-					<title>Inventory App</title>
-					<script src="https://unpkg.com/htmx.org@1.9.10"></script>
-					<script src="https://cdn.tailwindcss.com"></script>
-				</head>
-				<body class="bg-gray-100 p-8">
-					<div class="max-w-4xl mx-auto">{children}</div>
-				</body>
-			</html>
-		);
-	})
+	jsxRenderer(({ children }) => (
+		<html>
+			<head>
+				<title>Inventory App</title>
+				<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+				<script src="https://cdn.tailwindcss.com"></script>
+			</head>
+			<body class="bg-gray-100 p-8">
+				<div class="max-w-4xl mx-auto">{children}</div>
+			</body>
+		</html>
+	))
 );
 
 // Home page
-app.get('/', (c) => {
-	return c.render(
+app.get('/', (c) =>
+	c.render(
 		<div>
 			<h1 class="text-3xl font-bold mb-6">Inventory Management</h1>
 			<div class="grid grid-cols-2 gap-6">
@@ -71,38 +72,19 @@ app.get('/', (c) => {
 				</div>
 			</div>
 		</div>
-	);
-});
-
-// Database initialization (run this once to set up your tables)
-app.get('/init', async (c) => {
-	const { DB } = c.env;
-	await DB.exec(`
-    CREATE TABLE IF NOT EXISTS categories (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS items (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      description TEXT,
-      category_id INTEGER,
-      FOREIGN KEY (category_id) REFERENCES categories(id)
-    );
-  `);
-	return c.text('Database initialized');
-});
+	)
+);
 
 // Category routes
 const categorySchema = z.object({
 	name: z.string().min(1),
 });
 
-app.post('/categories', zValidator('json', categorySchema), async (c) => {
-	const { name } = c.req.valid('json');
+app.post('/categories', zValidator('form', categorySchema), async (c) => {
+	const { name } = c.req.valid('form');
 	const { DB } = c.env;
 	const result = await DB.prepare('INSERT INTO categories (name) VALUES (?)').bind(name).run();
-	return c.html(
+	return c.render(
 		<li>
 			{name} (ID: {result.meta.last_row_id})
 		</li>
@@ -111,11 +93,11 @@ app.post('/categories', zValidator('json', categorySchema), async (c) => {
 
 app.get('/categories', async (c) => {
 	const { DB } = c.env;
-	const categories = await DB.prepare('SELECT * FROM categories').all();
-	return c.html(
+	const categories = await DB.prepare('SELECT * FROM categories').all<Category>();
+	return c.render(
 		<>
-			{categories.results.map((category: Category) => (
-				<li>
+			{categories.results.map((category) => (
+				<li key={category.id}>
 					{category.name} (ID: {category.id})
 				</li>
 			))}
@@ -123,9 +105,9 @@ app.get('/categories', async (c) => {
 	);
 });
 
-app.put('/categories/:id', zValidator('json', categorySchema), async (c) => {
+app.put('/categories/:id', zValidator('form', categorySchema), async (c) => {
 	const id = c.req.param('id');
-	const { name } = c.req.valid('json');
+	const { name } = c.req.valid('form');
 	const { DB } = c.env;
 	await DB.prepare('UPDATE categories SET name = ? WHERE id = ?').bind(name, id).run();
 	return c.json({ id, name });
@@ -142,16 +124,16 @@ app.delete('/categories/:id', async (c) => {
 const itemSchema = z.object({
 	name: z.string().min(1),
 	description: z.string().optional(),
-	category_id: z.number().int().positive(),
+	category_id: z.string().transform((val) => parseInt(val, 10)),
 });
 
-app.post('/items', zValidator('json', itemSchema), async (c) => {
-	const { name, description, category_id } = c.req.valid('json');
+app.post('/items', zValidator('form', itemSchema), async (c) => {
+	const { name, description, category_id } = c.req.valid('form');
 	const { DB } = c.env;
 	const result = await DB.prepare('INSERT INTO items (name, description, category_id) VALUES (?, ?, ?)')
 		.bind(name, description, category_id)
 		.run();
-	return c.html(
+	return c.render(
 		<li>
 			{name} - {description} (Category ID: {category_id})
 		</li>
@@ -160,11 +142,11 @@ app.post('/items', zValidator('json', itemSchema), async (c) => {
 
 app.get('/items', async (c) => {
 	const { DB } = c.env;
-	const items = await DB.prepare('SELECT * FROM items').all();
-	return c.html(
+	const items = await DB.prepare('SELECT * FROM items').all<Item>();
+	return c.render(
 		<>
 			{items.results.map((item: Item) => (
-				<li>
+				<li key={item.id}>
 					{item.name} - {item.description} (Category ID: {item.category_id})
 				</li>
 			))}
